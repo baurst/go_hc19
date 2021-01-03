@@ -39,11 +39,13 @@ func getDatasetFiles(baseDir string, dataSets string) []string {
 
 }
 
-func readDatasetFile(datasetFile string) (err error) {
+func readDatasetFile(datasetFile string) []photo {
+
+	var photos []photo
 	fmt.Println("Reading: ", datasetFile)
 	file, err := os.Open(datasetFile)
 	if err != nil {
-		return err
+		return photos
 	}
 	defer file.Close()
 
@@ -60,11 +62,36 @@ func readDatasetFile(datasetFile string) (err error) {
 		if lineIdx == 0 {
 			numPhotos, _ = strconv.Atoi(strings.TrimSpace(line))
 		} else {
+			var pic photo
+			chunks := strings.Split(line, " ")
+			for i := range chunks {
+				chunks[i] = strings.TrimSpace(chunks[i])
+			}
 
-			// Process the line here.
-			fmt.Printf(" > Read %d characters\n", len(line))
+			if len(chunks) > 1 {
 
-			if err != nil {
+				orientation := strings.TrimSpace(chunks[0])
+
+				pic.isHorizontal = orientation == "H"
+				idx, _ := strconv.Atoi(strings.TrimSpace(chunks[1]))
+
+				pic.idx = idx
+				tags := chunks[2:]
+
+				var finalTags []string
+
+				for _, tag := range tags {
+					finalTags = append(finalTags, strings.TrimSpace(tag))
+				}
+
+				pic.tags = finalTags
+
+				photos = append(photos, pic)
+
+				if err != nil {
+					break
+				}
+			} else {
 				break
 			}
 		}
@@ -72,11 +99,11 @@ func readDatasetFile(datasetFile string) (err error) {
 	}
 	if err != io.EOF {
 		fmt.Printf(" > Failed with error: %v\n", err)
-		return err
+		return photos
 	}
 	fmt.Println("Num Photos: ", numPhotos)
 
-	return
+	return photos
 }
 
 func main() {
@@ -84,7 +111,9 @@ func main() {
 	datasets := getDatasetFiles(*dataDir, *datasets)
 	fmt.Println("Processing: ", datasets)
 	for _, ds := range datasets {
-		readDatasetFile(ds)
+		pics := readDatasetFile(ds)
+		fmt.Println(pics)
+
 	}
 	fmt.Printf("Done")
 	os.Exit(0)
