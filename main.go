@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -104,6 +105,61 @@ func readDatasetFile(datasetFile string) []photo {
 	fmt.Println("Num Photos: ", numPhotos)
 
 	return photos
+}
+
+func scoreAllSlides(slides []slide) float64 {
+	score := 0.0
+	if len(slides) > 1 {
+		prevSlideTags := slides[0].tags
+		for i := 1; i < len(slides); i++ {
+			curSlideTags := slides[i].tags
+			score += evaluateTags(prevSlideTags, curSlideTags)
+			prevSlideTags = curSlideTags
+		}
+	}
+	return score
+}
+
+func evaluateTags(prevSlide, curSlide []string) float64 {
+	mapIntersect := map[string]int{} // present in both tag-arrays
+	scoreIntersect := 0.0
+	mapTagsPrev := map[string]int{} // present only in tag-array i
+	scoreTagsPrev := 0.0
+	mapTagsCur := map[string]int{} // present only in tag-array i+1
+	scoreTagsCur := 0.0
+
+	for _, prevVal := range prevSlide {
+		mapIntersect[prevVal] = 1
+		mapTagsPrev[prevVal] = 1
+		mapTagsCur[prevVal] = 0
+	}
+	for _, curVal := range curSlide {
+		mapIntersect[curVal] = mapIntersect[curVal] + 1
+		mapTagsPrev[curVal] = 0
+		if _, present := mapTagsCur[curVal]; !present {
+			mapTagsCur[curVal] = 1
+		}
+	}
+
+	for _, mapIntersectVal := range mapIntersect {
+		if mapIntersectVal == 2 {
+			scoreIntersect++
+		}
+	}
+
+	for _, mapTagsPrevVal := range mapTagsPrev {
+		if mapTagsPrevVal == 1 {
+			scoreTagsPrev++
+		}
+	}
+
+	for _, mapTagsCurVal := range mapTagsCur {
+		if mapTagsCurVal == 1 {
+			scoreTagsCur++
+		}
+	}
+
+	return math.Min(scoreIntersect, math.Min(scoreTagsPrev, scoreTagsCur))
 }
 
 func main() {
