@@ -11,6 +11,17 @@ import (
 	"strings"
 )
 
+type photo struct {
+	tags         []string
+	isHorizontal bool
+	idx          int
+}
+
+type slide struct {
+	photos []photo
+	tags   []string
+}
+
 var dataDir = flag.String("data_dir", "datasets", "The directory where the the input datasets are stored.")
 var datasets = flag.String("datasets", "a_example.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
 
