@@ -5,11 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type photo struct {
@@ -107,8 +107,8 @@ func readDatasetFile(datasetFile string) []photo {
 	return photos
 }
 
-func scoreAllSlides(slides []slide) float64 {
-	score := 0.0
+func scoreAllSlides(slides []slide) int {
+	score := 0
 	if len(slides) > 1 {
 		prevSlideTags := slides[0].tags
 		for i := 1; i < len(slides); i++ {
@@ -120,13 +120,20 @@ func scoreAllSlides(slides []slide) float64 {
 	return score
 }
 
-func evaluateTags(prevSlide, curSlide []string) float64 {
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func evaluateTags(prevSlide, curSlide []string) int {
 	mapIntersect := map[string]int{} // present in both tag-arrays
-	scoreIntersect := 0.0
+	scoreIntersect := 0
 	mapTagsPrev := map[string]int{} // present only in tag-array i
-	scoreTagsPrev := 0.0
+	scoreTagsPrev := 0
 	mapTagsCur := map[string]int{} // present only in tag-array i+1
-	scoreTagsCur := 0.0
+	scoreTagsCur := 0
 
 	for _, prevVal := range prevSlide {
 		mapIntersect[prevVal] = 1
@@ -159,7 +166,36 @@ func evaluateTags(prevSlide, curSlide []string) float64 {
 		}
 	}
 
-	return math.Min(scoreIntersect, math.Min(scoreTagsPrev, scoreTagsCur))
+	return min(scoreIntersect, min(scoreTagsPrev, scoreTagsCur))
+}
+
+func writeSolution(result []slide, outDir string, score int, origDatasetPath string) {
+	currentTime := time.Now().Format("20060102150405")
+
+	datasetDescriptionArr := strings.Split(origDatasetPath, "/")
+	datasetDescription := strings.Split(datasetDescriptionArr[len(datasetDescriptionArr)-1], ".")[0]
+	var outFile = filepath.Join(outDir, currentTime+"_"+datasetDescription+"_"+fmt.Sprint(score)+".txt")
+	fmt.Println("Writing result to: ", outFile)
+	f, err := os.Create(outFile)
+
+	if err == nil {
+		fmt.Fprintln(f, len(result))
+		for _, el := range result {
+			var indices []string
+			for _, img := range el.photos {
+				indices = append(indices, fmt.Sprint(img.idx))
+			}
+
+			fmt.Fprintln(f, strings.Join(indices, " "))
+		}
+	}
+	fmt.Println("Wrote result to: ", outFile)
+
+}
+
+func createSolution(dataset []photo) []slide {
+	var solution []slide
+	return solution
 }
 
 func main() {
@@ -168,7 +204,9 @@ func main() {
 	fmt.Println("Processing: ", datasets)
 	for _, ds := range datasets {
 		pics := readDatasetFile(ds)
-		fmt.Println(pics)
+		solution := createSolution(pics)
+		score := scoreAllSlides(solution)
+		writeSolution(solution, "out", score, ds)
 
 	}
 	fmt.Printf("Done")
