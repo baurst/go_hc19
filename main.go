@@ -74,9 +74,9 @@ func readDatasetFile(datasetFile string) []photo {
 				orientation := strings.TrimSpace(chunks[0])
 
 				pic.isHorizontal = orientation == "H"
-				idx, _ := strconv.Atoi(strings.TrimSpace(chunks[1]))
+				// idx, _ := strconv.Atoi(strings.TrimSpace(chunks[1]))
 
-				pic.idx = idx
+				pic.idx = lineIdx - 1
 				tags := chunks[2:]
 
 				var finalTags []string
