@@ -171,10 +171,7 @@ func evaluateTags(prevSlide, curSlide []string) int {
 
 func writeSolution(result []slide, outDir string, score int, origDatasetPath string) {
 	currentTime := time.Now().Format("20060102150405")
-
-	datasetDescriptionArr := strings.Split(origDatasetPath, "/")
-	datasetDescription := strings.Split(datasetDescriptionArr[len(datasetDescriptionArr)-1], ".")[0]
-	var outFile = filepath.Join(outDir, currentTime+"_"+datasetDescription+"_"+fmt.Sprint(score)+".txt")
+	var outFile = filepath.Join(outDir, currentTime+"_"+strings.TrimSuffix(filepath.Base(origDatasetPath), filepath.Ext(origDatasetPath))+"_"+fmt.Sprint(score)+".txt")
 	fmt.Println("Writing result to: ", outFile)
 	f, err := os.Create(outFile)
 
@@ -193,8 +190,12 @@ func writeSolution(result []slide, outDir string, score int, origDatasetPath str
 
 }
 
-func createSolution(dataset []photo) []slide {
-	var solution []slide
+func createDumbSolution(dataset []photo) []slide {
+	solution := make([]slide, len(dataset))
+	for i, p := range dataset {
+		solution[i].photos = []photo{p}
+		solution[i].tags = p.tags
+	}
 	return solution
 }
 
@@ -204,7 +205,7 @@ func main() {
 	fmt.Println("Processing: ", datasets)
 	for _, ds := range datasets {
 		pics := readDatasetFile(ds)
-		solution := createSolution(pics)
+		solution := createDumbSolution(pics)
 		score := scoreAllSlides(solution)
 		writeSolution(solution, "out", score, ds)
 
