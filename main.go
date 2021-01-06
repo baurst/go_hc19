@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,9 @@ type slide struct {
 }
 
 var dataDir = flag.String("data_dir", "datasets", "The directory where the the input datasets are stored.")
+
+// var datasets = flag.String("datasets", "d_pet_pictures.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
+
 var datasets = flag.String("datasets", "a_example.txt b_lovely_landscapes.txt c_memorable_moments.txt d_pet_pictures.txt e_shiny_selfies.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
 
 func getDatasetFiles(baseDir string, dataSets string) []string {
@@ -284,9 +288,7 @@ func stringUnion(a, b []string) []string {
 	for k := range union {
 		keys = append(keys, k)
 	}
-
 	return keys
-
 }
 
 func createInitialSlideshowByNumTags(dataset []photo) []slide {
@@ -389,19 +391,135 @@ func arrangeVerticalPhotosByTagLength(verticalPhotos []photo) []slide {
 	return verticalSlides
 }
 
+func sum(array []int) int {
+	result := 0
+	for _, v := range array {
+		result += v
+	}
+	return result
+}
+
+func shuffleSolution(sol []slide) []slide {
+	dest := make([]slide, len(sol))
+	perm := rand.Perm(len(sol))
+	for i, v := range perm {
+		dest[v] = sol[i]
+	}
+	return dest
+}
+
+func getMaxAvailableIdx(a []int, slidesTaken []bool) int {
+	maxIdx := -1
+	max := -1
+	for i, e := range a {
+		if e > max && !slidesTaken[i] {
+			max = e
+			maxIdx = i
+		}
+	}
+	return maxIdx
+}
+
+func optimizeRandomSubsets(solution []slide, maxIter int) []slide {
+	const subsetSize int = 50
+	if len(solution) > subsetSize {
+		maxIdxUpper := len(solution) - subsetSize
+		for i := 0; i < maxIter; i++ {
+			startIdx := rand.Intn(maxIdxUpper)
+			// println("startIdx:", startIdx)
+			sliceToOptimize := solution[startIdx : startIdx+subsetSize]
+			// println("Photo indices before", converSlidesToPhotoIdx(sliceToOptimize))
+			origSlice := append([]slide(nil), sliceToOptimize...)
+			prevScore := scoreAllSlides(origSlice)
+			// println("prevScore:", prevScore)
+
+			var transitionScoreMatrix [subsetSize][subsetSize]int
+
+			for firstSlideIdx := 0; firstSlideIdx < subsetSize; firstSlideIdx++ {
+				for secondSlideIdx := firstSlideIdx; secondSlideIdx < subsetSize; secondSlideIdx++ {
+					if firstSlideIdx == secondSlideIdx {
+						transitionScoreMatrix[firstSlideIdx][secondSlideIdx] = -1000
+					} else {
+						localScore := evaluateTags(sliceToOptimize[firstSlideIdx].tags, sliceToOptimize[secondSlideIdx].tags)
+						transitionScoreMatrix[firstSlideIdx][secondSlideIdx] = localScore
+						transitionScoreMatrix[secondSlideIdx][firstSlideIdx] = localScore
+					}
+				}
+			}
+
+			slidesTaken := make([]bool, subsetSize)
+			greedyImprovedSlidesIdx := make([]int, 0, subsetSize)
+			startSlice := -1
+			bestFitSecondSlideIdx := -1
+			for firstSlideIdx := 0; firstSlideIdx < subsetSize; firstSlideIdx++ {
+				if startSlice < 0 {
+					startSlice = firstSlideIdx
+					greedyImprovedSlidesIdx = append(greedyImprovedSlidesIdx, startSlice)
+					slidesTaken[startSlice] = true
+				} else {
+					startSlice = bestFitSecondSlideIdx
+				}
+
+				bestFitSecondSlideIdx = getMaxAvailableIdx(transitionScoreMatrix[startSlice][:], slidesTaken)
+
+				if bestFitSecondSlideIdx < 0 {
+					break
+				}
+
+				greedyImprovedSlidesIdx = append(greedyImprovedSlidesIdx, bestFitSecondSlideIdx)
+				slidesTaken[bestFitSecondSlideIdx] = true
+			}
+
+			var improvedSlideSlice []slide
+			for _, greedyIndex := range greedyImprovedSlidesIdx {
+				improvedSlideSlice = append(improvedSlideSlice, sliceToOptimize[greedyIndex])
+			}
+
+			newScore := scoreAllSlides(improvedSlideSlice)
+			// fmt.Printf("greedyImprovedSlidesIdx: %v", greedyImprovedSlidesIdx)
+			// println("newScore:", newScore)
+
+			if newScore > prevScore {
+				for replacementIdx := 0; replacementIdx < subsetSize; replacementIdx++ {
+					solution[replacementIdx+startIdx] = improvedSlideSlice[replacementIdx]
+				}
+			}
+			// println("Photo indices after", converSlidesToPhotoIdx(solution[startIdx:startIdx+subsetSize]))
+
+		}
+
+	}
+
+	return solution
+
+}
+
 func main() {
 	flag.Parse()
 	datasets := getDatasetFiles(*dataDir, *datasets)
 	fmt.Println("Processing: ", datasets)
-	for _, ds := range datasets {
-		pics := readDatasetFile(ds)
-		solution := createInitialSlideshowByNumTags(pics)
-		solution = moveRandomSlideBy1(solution, 10000)
-		score := scoreAllSlides(solution)
-		writeSolution(solution, "out", score, ds)
-
+	scores := make([]int, len(datasets))
+	// sem := make(chan empty, len(datasets))
+	wg := &sync.WaitGroup{}
+	wg.Add(len(datasets))
+	for idx, ds := range datasets {
+		go func(idx int, ds string) {
+			defer wg.Done()
+			pics := readDatasetFile(ds)
+			solution := createInitialSlideshowByNumTags(pics)
+			fmt.Println("Previous score: ", scoreAllSlides(solution))
+			// solution = shuffleSolution(solution)
+			solution = optimizeRandomSubsets(solution, 10000)
+			fmt.Println("After optimization score: ", scoreAllSlides(solution))
+			solution = moveRandomSlideBy1(solution, 10000)
+			score := scoreAllSlides(solution)
+			writeSolution(solution, "out", score, ds)
+			scores[idx] = score
+		}(idx, ds)
 	}
-	fmt.Printf("Done")
+	wg.Wait()
+
+	fmt.Println("Done. Total score: ", sum(scores))
 	os.Exit(0)
 }
 
