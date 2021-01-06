@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
@@ -128,6 +129,13 @@ func min(a, b int) int {
 	return b
 }
 
+func max(a, b int) int {
+	if b > a {
+		return b
+	}
+	return a
+}
+
 func evaluateTags(prevSlide, curSlide []string) int {
 	mapIntersect := map[string]int{} // present in both tag-arrays
 	scoreIntersect := 0
@@ -194,6 +202,51 @@ func writeSolution(result []slide, outDir string, score int, origDatasetPath str
 	}
 	fmt.Println("Wrote result to: ", outFile)
 
+}
+
+func moveRandomSlideBy1(slides []slide, iterations int) []slide {
+	amountSlides := len(slides)
+	searchScope := 2
+	for i := 0; i < iterations; i++ {
+		randomSlideIdx := rand.Intn(amountSlides)
+		relevantSlides := make([]slide, 2*searchScope+1)
+		copy(relevantSlides, slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)])
+		initialScore := scoreAllSlides(relevantSlides)
+		fmt.Printf("slides before %d iter around %d with score %d: %s\n", i, randomSlideIdx, initialScore, converSlidesToPhotoIdx(relevantSlides))
+		swapRightScore := scoreAllSlides(swapSlide(relevantSlides, min(searchScope, randomSlideIdx), -1))
+		swapLeftScore := scoreAllSlides(swapSlide(swapSlide(relevantSlides, min(searchScope, randomSlideIdx), -1), min(searchScope, randomSlideIdx), 1))
+		if swapRightScore > initialScore {
+			fmt.Println("SwappedRight")
+			swapSlide(slides, randomSlideIdx, -1)
+		} else if swapLeftScore > initialScore {
+			fmt.Println("SwappedLeft")
+			swapSlide(slides, randomSlideIdx, 1)
+		}
+		newScore := scoreAllSlides(slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)])
+		fmt.Printf("slides after %d iter around %d with score %d: %s\n", i, randomSlideIdx, newScore, converSlidesToPhotoIdx(slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)]))
+	}
+	return slides
+}
+
+func converSlidesToPhotoIdx(slides []slide) string {
+	photoString := ""
+	for _, valS := range slides {
+		idxString := ""
+		for _, valP := range valS.photos {
+			idxString += fmt.Sprint(valP.idx) + "+"
+		}
+		photoString += idxString + " "
+	}
+	return photoString
+}
+
+func swapSlide(slides []slide, position int, movement int) []slide {
+	if position+movement > 0 && position+movement < len(slides) {
+		slideAtPosition := slides[position]
+		slides[position] = slides[position+movement]
+		slides[position+movement] = slideAtPosition
+	}
+	return slides
 }
 
 func createDumbSolution(dataset []photo) []slide {
@@ -274,6 +327,7 @@ func main() {
 	for _, ds := range datasets {
 		pics := readDatasetFile(ds)
 		solution := createInitialSlideshowByNumTags(pics)
+		solution = moveRandomSlideBy1(solution, 20)
 		score := scoreAllSlides(solution)
 		writeSolution(solution, "out", score, ds)
 
