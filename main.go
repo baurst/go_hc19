@@ -26,7 +26,7 @@ type slide struct {
 }
 
 var dataDir = flag.String("data_dir", "datasets", "The directory where the the input datasets are stored.")
-var datasets = flag.String("datasets", "a_example.txt b_lovely_landscapes.txt c_memorable_moments.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
+var datasets = flag.String("datasets", "a_example.txt b_lovely_landscapes.txt c_memorable_moments.txt d_pet_pictures.txt e_shiny_selfies.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
 
 func getDatasetFiles(baseDir string, dataSets string) []string {
 	var ds = strings.Split(strings.TrimSpace(dataSets), " ")
@@ -188,16 +188,30 @@ func writeSolution(result []slide, outDir string, score int, origDatasetPath str
 	if err == nil {
 		fmt.Fprintln(f, len(result))
 		for _, el := range result {
-			var indices []string
+			var indices []int
 			for _, img := range el.photos {
-				indices = append(indices, fmt.Sprint(img.idx))
+				indices = append(indices, img.idx)
 				if _, ok := imageIndices[img.idx]; ok {
 					panic("Solution contains duplicates!")
 				}
 				imageIndices[img.idx] = true
 			}
 
-			fmt.Fprintln(f, strings.Join(indices, " "))
+			sep := ","
+			n := len(sep) * (len(indices) - 1)
+			for i := 0; i < len(indices); i++ {
+				n += len(fmt.Sprint(indices[i]))
+			}
+
+			var b strings.Builder
+			b.Grow(n)
+			b.WriteString(fmt.Sprint(indices[0]))
+			for _, s := range indices[1:] {
+				b.WriteString(sep)
+				b.WriteString(fmt.Sprint(s))
+			}
+
+			fmt.Fprintln(f, b.String())
 		}
 	}
 	fmt.Println("Wrote result to: ", outFile)
@@ -212,18 +226,18 @@ func moveRandomSlideBy1(slides []slide, iterations int) []slide {
 		relevantSlides := make([]slide, 2*searchScope+1)
 		copy(relevantSlides, slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)])
 		initialScore := scoreAllSlides(relevantSlides)
-		fmt.Printf("slides before %d iter around %d with score %d: %s\n", i, randomSlideIdx, initialScore, converSlidesToPhotoIdx(relevantSlides))
+		//fmt.Printf("slides before %d iter around %d with score %d: %s\n", i, randomSlideIdx, initialScore, converSlidesToPhotoIdx(relevantSlides))
 		swapRightScore := scoreAllSlides(swapSlide(relevantSlides, min(searchScope, randomSlideIdx), -1))
 		swapLeftScore := scoreAllSlides(swapSlide(swapSlide(relevantSlides, min(searchScope, randomSlideIdx), -1), min(searchScope, randomSlideIdx), 1))
 		if swapRightScore > initialScore {
-			fmt.Println("SwappedRight")
+			//fmt.Println("SwappedRight")
 			swapSlide(slides, randomSlideIdx, -1)
 		} else if swapLeftScore > initialScore {
-			fmt.Println("SwappedLeft")
+			//fmt.Println("SwappedLeft")
 			swapSlide(slides, randomSlideIdx, 1)
 		}
-		newScore := scoreAllSlides(slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)])
-		fmt.Printf("slides after %d iter around %d with score %d: %s\n", i, randomSlideIdx, newScore, converSlidesToPhotoIdx(slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)]))
+		//newScore := scoreAllSlides(slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)])
+		//fmt.Printf("slides after %d iter around %d with score %d: %s\n", i, randomSlideIdx, newScore, converSlidesToPhotoIdx(slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)]))
 	}
 	return slides
 }
@@ -286,25 +300,13 @@ func createInitialSlideshowByNumTags(dataset []photo) []slide {
 			verticalPhotos = append(verticalPhotos, pic)
 		}
 	}
+
+	fmt.Println("# vertical photos: " + fmt.Sprint(len(verticalPhotos)))
 	// Vertical Slides
 	sort.Slice(verticalPhotos, func(i, j int) bool {
 		return len(verticalPhotos[i].tags) < len(verticalPhotos[i].tags)
 	})
-
-	numVertSlides := int(len(verticalPhotos) / 2.0)
-	isEvenNumSlides := len(verticalPhotos)%2 == 0
-
-	var verticalSlides []slide
-	for i := 0; i < numVertSlides; i++ {
-		firstImg := verticalPhotos[i]
-		lastImg := verticalPhotos[len(verticalPhotos)-1-i]
-		totalTags := stringUnion(firstImg.tags, lastImg.tags)
-		verticalSlides = append(verticalSlides, slide{[]photo{firstImg, lastImg}, totalTags})
-	}
-
-	if !isEvenNumSlides {
-		verticalSlides = append(verticalSlides, slide{[]photo{verticalPhotos[numVertSlides+1]}, verticalPhotos[numVertSlides+1].tags})
-	}
+	verticalSlides := arrangeVerticalPhotosByTotalTagsOfN(verticalPhotos, 20)
 
 	// Horizontal Slides
 	var horizontalSlides []slide
@@ -320,6 +322,73 @@ func createInitialSlideshowByNumTags(dataset []photo) []slide {
 
 }
 
+func narrowIndicesTo(vs []bool, num int) []int {
+	vsf := make([]int, 0, num)
+	storedValues := 0
+	for i := len(vs) - 1; i >= 0; i-- {
+		if !vs[i] {
+			vsf = append(vsf, i)
+			storedValues++
+		}
+		if storedValues >= num {
+			return vsf
+		}
+	}
+	return vsf
+}
+
+func arrangeVerticalPhotosByTotalTagsOfN(verticalPhotos []photo, num int) []slide {
+	var verticalSlides []slide
+	verticalPhotosUsed := make([]bool, len(verticalPhotos))
+	for i := 0; i < len(verticalPhotos); i++ {
+		if verticalPhotosUsed[i] == false {
+			baseImg := verticalPhotos[i]
+			verticalPhotosUsed[i] = true
+			maxTagCount := len(baseImg.tags)
+			maxTagCountIdx := -1
+
+			for _, j := range narrowIndicesTo(verticalPhotosUsed, num) {
+				if verticalPhotosUsed[j] == false {
+					nextImg := verticalPhotos[j]
+					totalTagsCount := len(stringUnion(baseImg.tags, nextImg.tags))
+					if totalTagsCount > maxTagCount {
+						maxTagCount = totalTagsCount
+						maxTagCountIdx = j
+					}
+				}
+			}
+			if maxTagCountIdx >= 0 {
+				usedImg := verticalPhotos[maxTagCountIdx]
+				verticalPhotosUsed[maxTagCountIdx] = true
+				totalTags := stringUnion(baseImg.tags, usedImg.tags)
+				verticalSlides = append(verticalSlides, slide{[]photo{baseImg, usedImg}, totalTags})
+			} else {
+				verticalSlides = append(verticalSlides, slide{[]photo{baseImg}, baseImg.tags})
+			}
+		}
+	}
+	return verticalSlides
+}
+
+func arrangeVerticalPhotosByTagLength(verticalPhotos []photo) []slide {
+	numVertSlides := int(len(verticalPhotos) / 2.0)
+	isEvenNumSlides := len(verticalPhotos)%2 == 0
+
+	var verticalSlides []slide
+	for i := 0; i < numVertSlides; i++ {
+		firstImg := verticalPhotos[i]
+		lastImg := verticalPhotos[len(verticalPhotos)-1-i]
+		totalTags := stringUnion(firstImg.tags, lastImg.tags)
+		verticalSlides = append(verticalSlides, slide{[]photo{firstImg, lastImg}, totalTags})
+	}
+
+	if !isEvenNumSlides {
+		verticalSlides = append(verticalSlides, slide{[]photo{verticalPhotos[numVertSlides+1]}, verticalPhotos[numVertSlides+1].tags})
+	}
+
+	return verticalSlides
+}
+
 func main() {
 	flag.Parse()
 	datasets := getDatasetFiles(*dataDir, *datasets)
@@ -327,7 +396,7 @@ func main() {
 	for _, ds := range datasets {
 		pics := readDatasetFile(ds)
 		solution := createInitialSlideshowByNumTags(pics)
-		solution = moveRandomSlideBy1(solution, 20)
+		solution = moveRandomSlideBy1(solution, 10000)
 		score := scoreAllSlides(solution)
 		writeSolution(solution, "out", score, ds)
 
