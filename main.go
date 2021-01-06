@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ type slide struct {
 }
 
 var dataDir = flag.String("data_dir", "datasets", "The directory where the the input datasets are stored.")
-var datasets = flag.String("datasets", "a_example.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
+var datasets = flag.String("datasets", "a_example.txt b_lovely_landscapes.txt c_memorable_moments.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
 
 func getDatasetFiles(baseDir string, dataSets string) []string {
 	var ds = strings.Split(strings.TrimSpace(dataSets), " ")
@@ -175,12 +176,17 @@ func writeSolution(result []slide, outDir string, score int, origDatasetPath str
 	fmt.Println("Writing result to: ", outFile)
 	f, err := os.Create(outFile)
 
+	imageIndices := map[int]bool{}
 	if err == nil {
 		fmt.Fprintln(f, len(result))
 		for _, el := range result {
 			var indices []string
 			for _, img := range el.photos {
 				indices = append(indices, fmt.Sprint(img.idx))
+				if _, ok := imageIndices[img.idx]; ok {
+					panic("Solution contains duplicates!")
+				}
+				imageIndices[img.idx] = true
 			}
 
 			fmt.Fprintln(f, strings.Join(indices, " "))
@@ -199,13 +205,75 @@ func createDumbSolution(dataset []photo) []slide {
 	return solution
 }
 
+func stringUnion(a, b []string) []string {
+	union := map[string]bool{}
+	for _, val := range a {
+		union[val] = true
+	}
+	for _, val := range b {
+		union[val] = true
+	}
+	keys := make([]string, 0, len(union))
+	for k := range union {
+		keys = append(keys, k)
+	}
+
+	return keys
+
+}
+
+func createInitialSlideshowByNumTags(dataset []photo) []slide {
+	var horizontalPhotos []photo
+	var verticalPhotos []photo
+
+	for _, pic := range dataset {
+		if pic.isHorizontal {
+			horizontalPhotos = append(horizontalPhotos, pic)
+		} else {
+			verticalPhotos = append(verticalPhotos, pic)
+		}
+	}
+	// Vertical Slides
+	sort.Slice(verticalPhotos, func(i, j int) bool {
+		return len(verticalPhotos[i].tags) < len(verticalPhotos[i].tags)
+	})
+
+	numVertSlides := int(len(verticalPhotos) / 2.0)
+	isEvenNumSlides := len(verticalPhotos)%2 == 0
+
+	var verticalSlides []slide
+	for i := 0; i < numVertSlides; i++ {
+		firstImg := verticalPhotos[i]
+		lastImg := verticalPhotos[len(verticalPhotos)-1-i]
+		totalTags := stringUnion(firstImg.tags, lastImg.tags)
+		verticalSlides = append(verticalSlides, slide{[]photo{firstImg, lastImg}, totalTags})
+	}
+
+	if !isEvenNumSlides {
+		verticalSlides = append(verticalSlides, slide{[]photo{verticalPhotos[numVertSlides+1]}, verticalPhotos[numVertSlides+1].tags})
+	}
+
+	// Horizontal Slides
+	var horizontalSlides []slide
+	for _, pic := range horizontalPhotos {
+		tmpSlide := slide{[]photo{pic}, pic.tags}
+		horizontalSlides = append(horizontalSlides, tmpSlide)
+	}
+	var slides []slide
+	slides = append(slides, horizontalSlides...)
+	slides = append(slides, verticalSlides...)
+
+	return slides
+
+}
+
 func main() {
 	flag.Parse()
 	datasets := getDatasetFiles(*dataDir, *datasets)
 	fmt.Println("Processing: ", datasets)
 	for _, ds := range datasets {
 		pics := readDatasetFile(ds)
-		solution := createDumbSolution(pics)
+		solution := createInitialSlideshowByNumTags(pics)
 		score := scoreAllSlides(solution)
 		writeSolution(solution, "out", score, ds)
 
