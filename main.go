@@ -108,8 +108,10 @@ func readDatasetFile(datasetFile string) []photo {
 		fmt.Printf(" > Failed with error: %v\n", err)
 		return photos
 	}
-	fmt.Println("Num Photos: ", numPhotos)
 
+	if numPhotos != len(photos) {
+		panic("Incorrect number of photos read!")
+	}
 	return photos
 }
 
@@ -185,7 +187,6 @@ func evaluateTags(prevSlide, curSlide []string) int {
 func writeSolution(result []slide, outDir string, score int, origDatasetPath string) {
 	currentTime := time.Now().Format("20060102150405")
 	var outFile = filepath.Join(outDir, currentTime+"_"+strings.TrimSuffix(filepath.Base(origDatasetPath), filepath.Ext(origDatasetPath))+"_"+fmt.Sprint(score)+".txt")
-	fmt.Println("Writing result to: ", outFile)
 	f, err := os.Create(outFile)
 
 	imageIndices := map[int]bool{}
@@ -303,7 +304,6 @@ func createInitialSlideshowByNumTags(dataset []photo) []slide {
 		}
 	}
 
-	fmt.Println("# vertical photos: " + fmt.Sprint(len(verticalPhotos)))
 	// Vertical Slides
 	sort.Slice(verticalPhotos, func(i, j int) bool {
 		return len(verticalPhotos[i].tags) < len(verticalPhotos[i].tags)
@@ -448,10 +448,11 @@ func optimizeRandomSubsets(solution []slide, maxIter int) []slide {
 			}
 
 			slidesTaken := make([]bool, subsetSize)
+			slidesTaken[len(slidesTaken)-1] = true
 			greedyImprovedSlidesIdx := make([]int, 0, subsetSize)
 			startSlice := -1
 			bestFitSecondSlideIdx := -1
-			for firstSlideIdx := 0; firstSlideIdx < subsetSize; firstSlideIdx++ {
+			for firstSlideIdx := 0; firstSlideIdx < subsetSize-1; firstSlideIdx++ {
 				if startSlice < 0 {
 					startSlice = firstSlideIdx
 					greedyImprovedSlidesIdx = append(greedyImprovedSlidesIdx, startSlice)
@@ -469,7 +470,7 @@ func optimizeRandomSubsets(solution []slide, maxIter int) []slide {
 				greedyImprovedSlidesIdx = append(greedyImprovedSlidesIdx, bestFitSecondSlideIdx)
 				slidesTaken[bestFitSecondSlideIdx] = true
 			}
-
+			greedyImprovedSlidesIdx = append(greedyImprovedSlidesIdx, subsetSize-1)
 			var improvedSlideSlice []slide
 			for _, greedyIndex := range greedyImprovedSlidesIdx {
 				improvedSlideSlice = append(improvedSlideSlice, sliceToOptimize[greedyIndex])
@@ -507,12 +508,13 @@ func main() {
 			defer wg.Done()
 			pics := readDatasetFile(ds)
 			solution := createInitialSlideshowByNumTags(pics)
-			fmt.Println("Previous score: ", scoreAllSlides(solution))
+			initScore := scoreAllSlides(solution)
 			// solution = shuffleSolution(solution)
 			solution = optimizeRandomSubsets(solution, 10000)
-			fmt.Println("After optimization score: ", scoreAllSlides(solution))
+			afterOptimizationScore := scoreAllSlides(solution)
 			solution = moveRandomSlideBy1(solution, 10000)
 			score := scoreAllSlides(solution)
+			fmt.Println(ds, ": Initial score: ", initScore, " - After optimization: ", afterOptimizationScore, " - Final: ", score)
 			writeSolution(solution, "out", score, ds)
 			scores[idx] = score
 		}(idx, ds)
