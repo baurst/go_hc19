@@ -28,8 +28,6 @@ type slide struct {
 
 var dataDir = flag.String("data_dir", "datasets", "The directory where the the input datasets are stored.")
 
-// var datasets = flag.String("datasets", "d_pet_pictures.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
-
 var datasets = flag.String("datasets", "a_example.txt b_lovely_landscapes.txt c_memorable_moments.txt d_pet_pictures.txt e_shiny_selfies.txt", "List of datasets \"a_example.txt b_lovely_landscapes.txt ...\" to be processed")
 
 func getDatasetFiles(baseDir string, dataSets string) []string {
@@ -56,7 +54,6 @@ func readDatasetFile(datasetFile string) []photo {
 	}
 	defer file.Close()
 
-	// Start reading from the file with a reader.
 	reader := bufio.NewReader(file)
 	var line string
 	lineIdx := 0
@@ -80,7 +77,6 @@ func readDatasetFile(datasetFile string) []photo {
 				orientation := strings.TrimSpace(chunks[0])
 
 				pic.isHorizontal = orientation == "H"
-				// idx, _ := strconv.Atoi(strings.TrimSpace(chunks[1]))
 
 				pic.idx = lineIdx - 1
 				tags := chunks[2:]
@@ -231,18 +227,13 @@ func moveRandomSlideBy1(slides []slide, iterations int) []slide {
 		relevantSlides := make([]slide, 2*searchScope+1)
 		copy(relevantSlides, slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)])
 		initialScore := scoreAllSlides(relevantSlides)
-		//fmt.Printf("slides before %d iter around %d with score %d: %s\n", i, randomSlideIdx, initialScore, converSlidesToPhotoIdx(relevantSlides))
 		swapRightScore := scoreAllSlides(swapSlide(relevantSlides, min(searchScope, randomSlideIdx), -1))
 		swapLeftScore := scoreAllSlides(swapSlide(swapSlide(relevantSlides, min(searchScope, randomSlideIdx), -1), min(searchScope, randomSlideIdx), 1))
 		if swapRightScore > initialScore {
-			//fmt.Println("SwappedRight")
 			swapSlide(slides, randomSlideIdx, -1)
 		} else if swapLeftScore > initialScore {
-			//fmt.Println("SwappedLeft")
 			swapSlide(slides, randomSlideIdx, 1)
 		}
-		//newScore := scoreAllSlides(slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)])
-		//fmt.Printf("slides after %d iter around %d with score %d: %s\n", i, randomSlideIdx, newScore, converSlidesToPhotoIdx(slides[max(0, randomSlideIdx-searchScope):min(len(slides), randomSlideIdx+searchScope+1)]))
 	}
 	return slides
 }
@@ -426,12 +417,9 @@ func optimizeRandomSubsets(solution []slide, maxIter int) []slide {
 		maxIdxUpper := len(solution) - subsetSize
 		for i := 0; i < maxIter; i++ {
 			startIdx := rand.Intn(maxIdxUpper)
-			// println("startIdx:", startIdx)
 			sliceToOptimize := solution[startIdx : startIdx+subsetSize]
-			// println("Photo indices before", converSlidesToPhotoIdx(sliceToOptimize))
 			origSlice := append([]slide(nil), sliceToOptimize...)
 			prevScore := scoreAllSlides(origSlice)
-			// println("prevScore:", prevScore)
 
 			var transitionScoreMatrix [subsetSize][subsetSize]int
 
@@ -477,15 +465,12 @@ func optimizeRandomSubsets(solution []slide, maxIter int) []slide {
 			}
 
 			newScore := scoreAllSlides(improvedSlideSlice)
-			// fmt.Printf("greedyImprovedSlidesIdx: %v", greedyImprovedSlidesIdx)
-			// println("newScore:", newScore)
 
 			if newScore > prevScore {
 				for replacementIdx := 0; replacementIdx < subsetSize; replacementIdx++ {
 					solution[replacementIdx+startIdx] = improvedSlideSlice[replacementIdx]
 				}
 			}
-			// println("Photo indices after", converSlidesToPhotoIdx(solution[startIdx:startIdx+subsetSize]))
 
 		}
 
@@ -500,7 +485,6 @@ func main() {
 	datasets := getDatasetFiles(*dataDir, *datasets)
 	fmt.Println("Processing: ", datasets)
 	scores := make([]int, len(datasets))
-	// sem := make(chan empty, len(datasets))
 	wg := &sync.WaitGroup{}
 	wg.Add(len(datasets))
 	for idx, ds := range datasets {
@@ -509,7 +493,6 @@ func main() {
 			pics := readDatasetFile(ds)
 			solution := createInitialSlideshowByNumTags(pics)
 			initScore := scoreAllSlides(solution)
-			// solution = shuffleSolution(solution)
 			solution = optimizeRandomSubsets(solution, 10000)
 			afterOptimizationScore := scoreAllSlides(solution)
 			solution = moveRandomSlideBy1(solution, 10000)
@@ -524,41 +507,3 @@ func main() {
 	fmt.Println("Done. Total score: ", sum(scores))
 	os.Exit(0)
 }
-
-// var wg = sync.WaitGroup{}
-
-// func main() {
-// 	start := time.Now()
-// 	ch := make(chan int, 100)
-// 	wg.Add(1)
-// 	go sendInt(ch)
-// 	for i := 0; i < 100; i++ {
-// 		wg.Add(1)
-// 		go receiveInt(ch)
-// 	}
-// 	wg.Wait()
-// 	end := time.Now()
-
-// 	fmt.Println(time.Duration(end.Sub(start)))
-
-// 	fmt.Println(1000 * (10 + 100))
-
-// }
-
-// func receiveInt(ch <-chan int) {
-// 	for i := range ch {
-// 		fmt.Println("Received ", i)
-// 		time.Sleep(100 * time.Millisecond)
-// 	}
-// 	wg.Done()
-// }
-
-// func sendInt(ch chan<- int) {
-// 	for i := 0; i < 1000; i++ {
-// 		fmt.Println("Sending ", i)
-// 		ch <- i
-// 		time.Sleep(10 * time.Millisecond)
-// 	}
-// 	close(ch)
-// 	wg.Done()
-// }
