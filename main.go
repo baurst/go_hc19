@@ -300,7 +300,7 @@ func createInitialSlideshowByNumTags(dataset []photo) []slide {
 		return len(verticalPhotos[i].tags) < len(verticalPhotos[i].tags)
 	})
 	verticalSlides := arrangeVerticalPhotosByTotalTagsOfN(verticalPhotos, 20)
-
+	// verticalSlides := arrangeVerticalPhotosByTagLength(verticalPhotos)
 	// Horizontal Slides
 	var horizontalSlides []slide
 	for _, pic := range horizontalPhotos {
@@ -412,7 +412,9 @@ func getMaxAvailableIdx(a []int, slidesTaken []bool) int {
 }
 
 func optimizeRandomSubsets(solution []slide, maxIter int) []slide {
-	const subsetSize int = 50
+	const maxSubsetSize int = 100
+	const minSubsetSize int = 10
+	subsetSize := rand.Intn(maxSubsetSize-minSubsetSize) + minSubsetSize
 	if len(solution) > subsetSize {
 		maxIdxUpper := len(solution) - subsetSize
 		for i := 0; i < maxIter; i++ {
@@ -421,7 +423,11 @@ func optimizeRandomSubsets(solution []slide, maxIter int) []slide {
 			origSlice := append([]slide(nil), sliceToOptimize...)
 			prevScore := scoreAllSlides(origSlice)
 
-			var transitionScoreMatrix [subsetSize][subsetSize]int
+			// var transitionScoreMatrix [subsetSize][subsetSize]int
+			transitionScoreMatrix := make([][]int, subsetSize)
+			for i := range transitionScoreMatrix {
+				transitionScoreMatrix[i] = make([]int, subsetSize)
+			}
 
 			for firstSlideIdx := 0; firstSlideIdx < subsetSize; firstSlideIdx++ {
 				for secondSlideIdx := firstSlideIdx; secondSlideIdx < subsetSize; secondSlideIdx++ {
@@ -483,6 +489,8 @@ func optimizeRandomSubsets(solution []slide, maxIter int) []slide {
 func main() {
 	flag.Parse()
 	datasets := getDatasetFiles(*dataDir, *datasets)
+	newpath := filepath.Join(".", "out")
+	os.MkdirAll(newpath, os.ModePerm)
 	fmt.Println("Processing: ", datasets)
 	scores := make([]int, len(datasets))
 	wg := &sync.WaitGroup{}
@@ -493,9 +501,9 @@ func main() {
 			pics := readDatasetFile(ds)
 			solution := createInitialSlideshowByNumTags(pics)
 			initScore := scoreAllSlides(solution)
-			solution = optimizeRandomSubsets(solution, 10000)
+			solution = optimizeRandomSubsets(solution, 1000)
 			afterOptimizationScore := scoreAllSlides(solution)
-			solution = moveRandomSlideBy1(solution, 10000)
+			solution = moveRandomSlideBy1(solution, 100000)
 			score := scoreAllSlides(solution)
 			fmt.Println(ds, ": Initial score: ", initScore, " - After optimization: ", afterOptimizationScore, " - Final: ", score)
 			writeSolution(solution, "out", score, ds)
